@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   Save,
+  Brain,
   Trash2,
   Users,
 } from 'lucide-react';
@@ -331,10 +332,10 @@ export default function MaterialEditorPage() {
                     <span className="truncate">Quyền chỉnh sửa · Chỉ được sửa nội dung tài liệu</span>
                   ) : isConnected ? (
                     <>
-                     
+
                       <span
                         className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-                        title='Đang online' 
+                        title='Đang online'
                       >
                         <span
                           className={`h-2 w-2 rounded-full  bg-green-500`}
@@ -345,7 +346,7 @@ export default function MaterialEditorPage() {
                   ) : (
                     <>
                       <Loader2 size={13} className="animate-spin" />
-                       <span
+                      <span
                         className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
                         title='Mất kết nối'
                       >
@@ -390,6 +391,17 @@ export default function MaterialEditorPage() {
               <Separator orientation="vertical" className="hidden h-8 md:block" />
 
               <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 md:w-auto md:overflow-visible md:pb-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    router.push(`/subjects/${subjectId}/materials/${materialId}/flashcards`)
+                  }
+                  className="shrink-0 gap-2"
+                >
+                  <Brain size={15} />
+                  <span className="hidden sm:inline">FlashCard</span>
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
