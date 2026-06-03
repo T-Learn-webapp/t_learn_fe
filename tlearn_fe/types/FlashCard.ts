@@ -1,8 +1,7 @@
 export enum FlashcardReviewQuality {
   Again = 1,
-  Hard = 2,
-  Good = 3,
-  Easy = 4,
+  
+  Good = 2,
 }
 
 export interface FlashcardProgressDto {
@@ -27,15 +26,18 @@ export interface FlashcardDto {
   createdAt: string;
   updatedAt?: string | null;
   progress?: FlashcardProgressDto | null;
+  learningStatus?: FlashcardLearningStatus;
 }
 
 export interface ReviewFlashcardProgressRequest {
   quality: FlashcardReviewQuality;
 }
-
 export interface GetFlashcardsParams {
+  materialId?: string;
   pageNumber?: number;
   pageSize?: number;
+  searchTerm?: string;
+  status?: FlashcardLearningStatus;
 }
 
 export interface GetDueFlashcardsParams {
@@ -77,4 +79,10 @@ export interface UpdateFlashcardItemRequest {
 export interface UpdateManyFlashcardsRequest {
   materialId: string;
   flashcards: UpdateFlashcardItemRequest[];
+}
+export enum FlashcardLearningStatus {
+  NotStudied = 1,
+  Studied = 2,
+  NeedReview = 3,
+  Remembered = 4,
 }

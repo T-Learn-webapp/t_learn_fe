@@ -165,12 +165,12 @@ useNotificationRealtime({
                           {notification.title}
                         </p>
 
-                        <Badge
+                        {/* <Badge
                           variant={notification.isRead ? 'secondary' : 'destructive'}
                           className="shrink-0 text-[10px]"
                         >
                           {notification.type}
-                        </Badge>
+                        </Badge> */}
                       </div>
 
                       <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">

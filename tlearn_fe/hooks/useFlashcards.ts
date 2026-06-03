@@ -8,12 +8,23 @@ import {
     FlashcardDto,
     FlashcardProgressDto,
     FlashcardReviewQuality,
-    UpdateManyFlashcardsRequest
+    UpdateFlashcardItemRequest,
+    FlashcardLearningStatus
 } from '@/types/FlashCard';
 
 import { toast } from 'sonner';
 
-type FlashcardMode = 'all' | 'due';
+type FlashcardMode =
+
+    | 'all'
+
+    | 'notStudied'
+
+    | 'studied'
+
+    | 'needReview'
+
+    | 'remembered';
 
 export function useFlashcards(materialId?: string) {
     const [flashcards, setFlashcards] = useState<FlashcardDto[]>([]);
@@ -22,7 +33,7 @@ export function useFlashcards(materialId?: string) {
     const [mode, setMode] = useState<FlashcardMode>('all');
     const [createFlashcardLoading, setCreateFlashcardLoading] = useState(false);
     const [updateFlashcardLoading, setUpdateFlashcardLoading] = useState(false);
-
+    const [resetProgressLoading, setResetProgressLoading] = useState(false);
     const [generateAILoading, setGenerateAILoading] = useState(false);
     const [pagination, setPagination] = useState({
         pageNumber: 1,
@@ -43,11 +54,30 @@ export function useFlashcards(materialId?: string) {
             hasNextPage: data.hasNextPage,
         });
     };
+    const mapModeToStatus = (
+        mode: FlashcardMode
+    ): FlashcardLearningStatus | undefined => {
+        switch (mode) {
+            case 'notStudied':
+                return FlashcardLearningStatus.NotStudied;
+            case 'studied':
+                return FlashcardLearningStatus.Studied;
+            case 'needReview':
+                return FlashcardLearningStatus.NeedReview;
+            case 'remembered':
+                return FlashcardLearningStatus.Remembered;
+            case 'all':
+            default:
+                return undefined;
+        }
+    };
 
     const getFlashcards = useCallback(
         async (
             pageNumber: number = 1,
-            pageSize: number = 10
+            pageSize: number = 10,
+            status?: FlashcardLearningStatus,
+            searchTerm?: string
         ) => {
             if (!materialId) {
                 return {
@@ -55,13 +85,14 @@ export function useFlashcards(materialId?: string) {
                 };
             }
 
-            setMode('all');
             setFlashcardLoading(true);
 
             try {
                 const res = await flashcardsApi.getByMaterial(materialId, {
                     pageNumber,
                     pageSize,
+                    status,
+                    searchTerm,
                 });
 
                 if (res.data?.isSuccess && res.data?.data) {
@@ -182,12 +213,11 @@ export function useFlashcards(materialId?: string) {
                 success: false,
             };
         }
-
         const validItems = flashcardItems.filter(
             (item) =>
                 item.id &&
-                item.front.trim() &&
-                item.back.trim()
+                item.front?.trim() &&
+                item.back?.trim()
         );
 
         if (validItems.length === 0) {
@@ -210,9 +240,8 @@ export function useFlashcards(materialId?: string) {
                     isAIGenerated: item.isAIGenerated,
                 })),
             });
-
             if (res.data?.isSuccess && res.data?.data) {
-                const updatedFlashcards = res.data.data ?? [];
+                const updatedFlashcards: FlashcardDto[] = res.data.data ?? [];
 
                 toast.success(`Đã cập nhật ${updatedFlashcards.length} flashcard`);
 
@@ -313,61 +342,6 @@ export function useFlashcards(materialId?: string) {
         }
     };
 
-    const getDueFlashcards = useCallback(
-        async (
-            pageNumber: number = 1,
-            pageSize: number = 10
-        ) => {
-            if (!materialId) {
-                return {
-                    success: false,
-                };
-            }
-
-            setMode('due');
-            setFlashcardLoading(true);
-
-            try {
-                const res = await flashcardsApi.getDue({
-                    materialId,
-                    pageNumber,
-                    pageSize,
-                });
-
-                if (res.data?.isSuccess && res.data?.data) {
-                    setFlashcards(res.data.data.items || []);
-                    applyPagination(res.data.data);
-
-                    return {
-                        success: true,
-                        data: res.data.data,
-                    };
-                }
-
-                toast.error(res.data?.error || 'Không thể tải flashcard cần ôn');
-
-                return {
-                    success: false,
-                };
-            } catch (error: any) {
-                console.error('Get due flashcards error:', error);
-
-                toast.error(
-                    error?.response?.data?.message ||
-                    error?.response?.data?.error ||
-                    'Không thể tải flashcard cần ôn'
-                );
-
-                return {
-                    success: false,
-                    error,
-                };
-            } finally {
-                setFlashcardLoading(false);
-            }
-        },
-        [materialId]
-    );
 
 
     const reviewFlashcard = async (
@@ -425,13 +399,73 @@ export function useFlashcards(materialId?: string) {
             setReviewLoadingId(null);
         }
     };
+    const getFlashcardsByMode = useCallback(
+        async (
+            nextMode: FlashcardMode,
+            pageNumber: number = 1,
+            pageSize: number = 10
+        ) => {
+            setMode(nextMode);
+
+            return getFlashcards(
+                pageNumber,
+                pageSize,
+                mapModeToStatus(nextMode)
+            );
+        },
+        [getFlashcards]
+    );
 
     const reloadCurrentMode = async () => {
-        if (mode === 'due') {
-            return getDueFlashcards(pagination.pageNumber, pagination.pageSize);
+        return getFlashcards(
+            pagination.pageNumber,
+            pagination.pageSize,
+            mapModeToStatus(mode)
+        );
+    };
+    const resetMaterialProgress = async () => {
+        if (!materialId) {
+            toast.error('Không tìm thấy tài liệu');
+            return {
+                success: false,
+            };
         }
 
-        return getFlashcards(pagination.pageNumber, pagination.pageSize);
+        setResetProgressLoading(true);
+
+        try {
+            const res = await flashcardsApi.resetProgressByMaterial(materialId);
+
+            if (res.data?.isSuccess && res.data?.data) {
+                toast.success('Đã reset tiến trình học FlashCard');
+
+                return {
+                    success: true,
+                    data: res.data.data,
+                };
+            }
+
+            toast.error(res.data?.error || 'Không thể reset tiến trình học');
+
+            return {
+                success: false,
+            };
+        } catch (error: any) {
+            console.error('Reset flashcard progress error:', error);
+
+            toast.error(
+                error?.response?.data?.message ||
+                error?.response?.data?.error ||
+                'Không thể reset tiến trình học'
+            );
+
+            return {
+                success: false,
+                error,
+            };
+        } finally {
+            setResetProgressLoading(false);
+        }
     };
 
     return {
@@ -444,17 +478,20 @@ export function useFlashcards(materialId?: string) {
         pagination,
         mode,
 
+        resetProgressLoading,
+        resetMaterialProgress,
+
         createFlashcardLoading,
 
         updateFlashcardLoading,
         updateManyFlashcards,
-        
+
         generateAILoading,
         createManyFlashcards,
         generateAIFlashcards,
 
         getFlashcards,
-        getDueFlashcards,
+        getFlashcardsByMode,
         reviewFlashcard,
         reloadCurrentMode,
     };

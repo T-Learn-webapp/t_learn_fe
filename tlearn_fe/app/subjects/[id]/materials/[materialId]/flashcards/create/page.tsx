@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { useAuthContext } from '@/components/providers/AuthProvider';
 
 type CreateMode = 'manual' | 'ai';
 
@@ -33,7 +34,7 @@ const emptyFlashcard = (): CreateFlashcardItemRequest => ({
 export default function CreateFlashcardPage() {
     const params = useParams();
     const router = useRouter();
-
+    const { user } = useAuthContext();
     const subjectId = params.id as string;
     const materialId = params.materialId as string;
 
@@ -52,6 +53,13 @@ export default function CreateFlashcardPage() {
 
     const isLoading = createFlashcardLoading || generateAILoading;
 
+    const MAX_AI_FLASHCARD_COUNT = 20;
+    const aiRemainingCount = user?.aiRemainingCount ?? 0;
+    const aiUsageLimit = user?.aiUsageLimit ?? 0;
+    const aiUsedCount = user?.aiUsedCount ?? 0;
+
+    const hasAIUsage = aiRemainingCount > 0;
+    const aiCountExceedLimit = aiCount > MAX_AI_FLASHCARD_COUNT;
     const updateItem = (
         index: number,
         field: keyof CreateFlashcardItemRequest,
@@ -82,7 +90,17 @@ export default function CreateFlashcardPage() {
     };
 
     const handleGenerateAI = async () => {
-        const result = await generateAIFlashcards(aiCount);
+        if (!hasAIUsage) {
+            return;
+        }
+
+        if (aiCountExceedLimit) {
+            return;
+        }
+
+        const safeCount = Math.min(aiCount, MAX_AI_FLASHCARD_COUNT);
+
+        const result = await generateAIFlashcards(safeCount);
 
         if (result.success && result.data) {
             setMode('manual');
@@ -183,33 +201,117 @@ export default function CreateFlashcardPage() {
                             <Sparkles size={28} />
                         </div>
 
-                        <h2 className="text-lg font-bold text-slate-900">
-                            Tạo FlashCard bằng AI
-                        </h2>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+
+                            <h2 className="text-lg font-bold text-slate-900">
+
+                                Tạo FlashCard bằng AI
+
+                            </h2>
+
+                            <Badge
+
+                                variant={hasAIUsage ? 'secondary' : 'destructive'}
+
+                                className="w-fit gap-1.5"
+
+                            >
+
+                                <Sparkles size={13} />
+
+                                AI còn {aiRemainingCount}/{aiUsageLimit} lượt
+
+                            </Badge>
+
+                        </div>
 
                         <p className="mt-2 text-sm leading-6 text-muted-foreground">
                             AI sẽ đọc nội dung material và tạo flashcard nháp. Quá trình này
                             có thể mất lâu nếu tài liệu dài hoặc số lượng flashcard lớn. Sau
                             khi AI tạo xong, bạn có thể chỉnh sửa từng thẻ trước khi lưu.
                         </p>
+                        <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="text-muted-foreground">
+                                    Lượt AI đã dùng hôm nay
+                                </span>
+                                <span className="font-semibold text-slate-900">
+                                    {aiUsedCount}/{aiUsageLimit}
+                                </span>
+                            </div>
+
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                                <div
+                                    className="h-full rounded-full bg-indigo-600 transition-all"
+                                    style={{
+                                        width: `${aiUsageLimit > 0 ? (aiUsedCount / aiUsageLimit) * 100 : 0}%`,
+                                    }}
+                                />
+                            </div>
+
+                            {!hasAIUsage && (
+                                <p className="mt-3 text-sm font-medium text-red-600">
+                                    Bạn đã hết lượt tạo FlashCard bằng AI hôm nay.
+                                </p>
+                            )}
+
+                            {hasAIUsage && aiCountExceedLimit && (
+
+                                <p className="mt-3 text-sm font-medium text-red-600">
+
+                                    Mỗi lượt AI chỉ có thể tạo tối đa {MAX_AI_FLASHCARD_COUNT} FlashCard.
+
+                                </p>
+
+                            )}
+                        </div>
 
                         <div className="mt-6 space-y-2">
                             <Label>Số lượng FlashCard</Label>
 
                             <Input
+
                                 type="number"
+
                                 min={1}
-                                max={50}
+
+                                max={MAX_AI_FLASHCARD_COUNT}
+
                                 value={aiCount}
-                                onChange={(event) => setAICount(Number(event.target.value))}
-                                disabled={isLoading}
+
+                                onChange={(event) => {
+
+                                    const value = Number(event.target.value);
+
+                                    if (Number.isNaN(value)) {
+
+                                        setAICount(1);
+
+                                        return;
+
+                                    }
+
+                                    setAICount(Math.max(1, Math.min(value, MAX_AI_FLASHCARD_COUNT)));
+
+                                }}
+
+                                disabled={isLoading || !hasAIUsage}
+
                             />
+
+                            <p className="text-xs text-muted-foreground">
+
+                                Mỗi lượt AI có thể tạo tối đa {MAX_AI_FLASHCARD_COUNT} FlashCard.
+
+                                Bạn còn {aiRemainingCount}/{aiUsageLimit} lượt AI.
+
+                            </p>
                         </div>
 
                         <Button
                             type="button"
                             onClick={handleGenerateAI}
-                            disabled={isLoading}
+                            disabled={isLoading || !hasAIUsage || aiCountExceedLimit}
                             className="mt-6 w-full gap-2"
                         >
                             {generateAILoading ? (
@@ -217,10 +319,20 @@ export default function CreateFlashcardPage() {
                                     <Loader2 size={16} className="animate-spin" />
                                     AI đang tạo flashcard, vui lòng chờ...
                                 </>
+                            ) : !hasAIUsage ? (
+                                <>
+                                    <Sparkles size={16} />
+                                    Đã hết lượt AI
+                                </>
+                            ) : aiCountExceedLimit ? (
+                                <>
+                                    <Sparkles size={16} />
+                                    Tối đa {MAX_AI_FLASHCARD_COUNT} FlashCard/lượt
+                                </>
                             ) : (
                                 <>
                                     <Sparkles size={16} />
-                                    Tạo nháp bằng AI
+                                    Tạo {aiCount} FlashCard bằng AI · còn {aiRemainingCount} lượt
                                 </>
                             )}
                         </Button>

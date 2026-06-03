@@ -11,7 +11,7 @@ import {
     FlashcardProgressDto,
     GeneratedFlashcardDto,
     GenerateAIFlashcardsRequest,
-    GetDueFlashcardsParams,
+
     GetFlashcardsParams,
     ReviewFlashcardProgressRequest,
     UpdateManyFlashcardsRequest,
@@ -19,23 +19,34 @@ import {
 
 export const flashcardsApi = {
     getByMaterial: (
+
         materialId: string,
+
         params?: GetFlashcardsParams
+
     ) =>
+
         api.get<ApiResponse<PagedResult<FlashcardDto>>>(
             `/api/flashcards/material/${materialId}`,
             {
-                params,
+
+                params: {
+
+                    pageNumber: params?.pageNumber,
+
+                    pageSize: params?.pageSize,
+
+                    searchTerm: params?.searchTerm,
+
+                    Status: params?.status,
+
+                },
+
             }
+
         ),
 
-    getDue: (params?: GetDueFlashcardsParams) =>
-        api.get<ApiResponse<PagedResult<FlashcardDto>>>(
-            '/api/flashcards/due',
-            {
-                params,
-            }
-        ),
+
 
     reviewProgress: (
         flashCardId: string,
@@ -61,5 +72,12 @@ export const flashcardsApi = {
         api.put<ApiResponse<FlashcardDto[]>>(
             '/api/flashcards/many',
             data
+        ),
+    resetProgressByMaterial: (materialId: string) =>
+
+        api.post<ApiResponse<boolean>>(
+
+            `/api/flashcards/material/${materialId}/reset-progress`
+
         ),
 };

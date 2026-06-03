@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   UserRound,
+  Users,
 } from 'lucide-react';
 
 import { useMaterialVersions } from '@/hooks/useMaterialVersions';
@@ -16,6 +17,58 @@ import { useMaterialVersions } from '@/hooks/useMaterialVersions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+type VersionContributor = {
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  userColor?: string;
+};
+
+const parseContributorsJson = (contributorsJson?: string | null) => {
+  if (!contributorsJson) return [] as VersionContributor[];
+
+  try {
+    const parsed = JSON.parse(contributorsJson);
+
+    if (!Array.isArray(parsed)) return [] as VersionContributor[];
+
+    const uniqueMap = new Map<string, VersionContributor>();
+
+    parsed.forEach((item) => {
+      const contributor: VersionContributor = {
+        userId: item?.userId || item?.UserId,
+        userName: item?.userName || item?.UserName,
+        userEmail: item?.userEmail || item?.UserEmail,
+        userColor: item?.userColor || item?.UserColor,
+      };
+
+      const key =
+        contributor.userId ||
+        contributor.userEmail ||
+        contributor.userName;
+
+      if (!key) return;
+
+      uniqueMap.set(String(key).toLowerCase(), contributor);
+    });
+
+    return Array.from(uniqueMap.values());
+  } catch (error) {
+    console.error('Parse contributors json error:', error);
+    return [] as VersionContributor[];
+  }
+};
+
+const getContributorFallback = (contributor: VersionContributor) => {
+  return (
+    contributor.userName?.slice(0, 2)?.toUpperCase() ||
+    contributor.userEmail?.slice(0, 2)?.toUpperCase() ||
+    contributor.userId?.slice(0, 2)?.toUpperCase() ||
+    'U'
+  );
+};
 
 export default function MaterialVersionDetailPage() {
   const params = useParams();
@@ -44,6 +97,10 @@ export default function MaterialVersionDetailPage() {
       year: 'numeric',
     });
   };
+
+  const contributors = useMemo(() => {
+    return parseContributorsJson((versionDetail as any)?.contributorsJson);
+  }, [versionDetail]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f1f3f4]">
@@ -135,6 +192,53 @@ export default function MaterialVersionDetailPage() {
                 <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
                   {versionDetail.changeNote}
                 </p>
+              )}
+
+              {contributors.length > 0 && (
+                <div className="mt-4 rounded-xl border bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <Users size={15} />
+                    Thành viên cùng chỉnh sửa khi lưu phiên bản
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {contributors.map((contributor) => (
+                      <div
+                        key={
+                          contributor.userId ||
+                          contributor.userEmail ||
+                          contributor.userName
+                        }
+                        className="flex min-w-0 items-center gap-3 rounded-lg border bg-white p-3"
+                      >
+                        <Avatar
+                          className="h-9 w-9 shrink-0 border-2"
+                          style={{
+                            borderColor: contributor.userColor || '#64748b',
+                          }}
+                        >
+                          <AvatarFallback
+                            className="text-xs font-semibold text-white"
+                            style={{
+                              backgroundColor: contributor.userColor || '#64748b',
+                            }}
+                          >
+                            {getContributorFallback(contributor)}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-800">
+                            {contributor.userName || 'Không rõ tên'}
+                          </p>
+                          <p className="truncate text-xs text-slate-500">
+                            {contributor.userEmail || contributor.userId || 'Không có email'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </section>
 

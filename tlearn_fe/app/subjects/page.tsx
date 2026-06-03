@@ -110,7 +110,7 @@ export default function SubjectsPage() {
       value: SubjectFilterType.Owned,
     },
     {
-      label: 'Được tham gia',
+      label: 'Được Mời ',
       value: SubjectFilterType.Joined,
     },
   ];

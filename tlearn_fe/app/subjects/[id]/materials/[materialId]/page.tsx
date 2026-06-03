@@ -1,30 +1,29 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { useParams, useRouter } from 'next/navigation';
 import {
-  Cloud,
+  Brain,
   History,
   Loader2,
   Pencil,
   Save,
-  Brain,
   Trash2,
   Users,
 } from 'lucide-react';
+
 import { useAuthContext } from '@/components/providers/AuthProvider';
 import { useCollaboration } from '@/hooks/useCollaboration';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-
-import { toast } from 'sonner';
 import { useMaterial } from '@/hooks/useMaterial';
 import { subjectsApi } from '@/services/modules/subject';
 import { mapStringToPermission } from '@/hooks/useInvite';
 import { SubjectPermission } from '@/types/Invite';
+
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Tooltip,
   TooltipContent,
@@ -32,9 +31,18 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+
+import { toast } from 'sonner';
 
 const CKEditor = dynamic(
   () => import('@ckeditor/ckeditor5-react').then((mod) => mod.CKEditor),
@@ -44,8 +52,10 @@ const CKEditor = dynamic(
 export default function MaterialEditorPage() {
   const params = useParams();
   const router = useRouter();
+
   const subjectId = params.id as string;
   const materialId = params.materialId as string;
+
   const { user } = useAuthContext();
 
   const {
@@ -55,11 +65,6 @@ export default function MaterialEditorPage() {
     deleteMaterial,
   } = useMaterial(materialId);
 
-  const [subjectOwnerId, setSubjectOwnerId] = useState<string | null>(null);
-  const [currentPermission, setCurrentPermission] =
-    useState<SubjectPermission | null>(null);
-  const [permissionLoading, setPermissionLoading] = useState(true);
-
   const {
     content,
     isConnected,
@@ -68,11 +73,16 @@ export default function MaterialEditorPage() {
     saveSnapshot,
   } = useCollaboration(materialId, user?.id || '');
 
-
-
-  const [editor, setEditor] = useState<any>(null);
   const editorRef = useRef<any>(null);
+  const [classicEditor, setClassicEditor] = useState<any>(null);
   const isRemoteUpdatingRef = useRef(false);
+  const updateContentRef = useRef(updateContent);
+  const canEditContentRef = useRef(false);
+
+  const [subjectOwnerId, setSubjectOwnerId] = useState<string | null>(null);
+  const [currentPermission, setCurrentPermission] =
+    useState<SubjectPermission | null>(null);
+  const [permissionLoading, setPermissionLoading] = useState(true);
 
   const [showUpdateInfoModal, setShowUpdateInfoModal] = useState(false);
   const [materialTitle, setMaterialTitle] = useState('');
@@ -90,6 +100,127 @@ export default function MaterialEditorPage() {
   const canManageMaterial = isOwner || isManager;
   const canEditContent = canManageMaterial || isEditor;
 
+  useEffect(() => {
+    canEditContentRef.current = canEditContent;
+  }, [canEditContent]);
+
+  useEffect(() => {
+    updateContentRef.current = updateContent;
+  }, [updateContent]);
+
+  useEffect(() => {
+    if (!material) return;
+
+    setMaterialTitle(material.title || '');
+    setMaterialSummary(material.summary || '');
+  }, [material]);
+
+  useEffect(() => {
+    if (!subjectId || !user?.id) return;
+
+    let cancelled = false;
+
+    const loadPermission = async () => {
+      setPermissionLoading(true);
+
+      try {
+        const [subjectRes, membersRes] = await Promise.all([
+          subjectsApi.getById(subjectId),
+          subjectsApi.getMembers(subjectId, {
+            pageNumber: 1,
+            pageSize: 100,
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        const ownerId = subjectRes.data?.data?.ownerId || null;
+        setSubjectOwnerId(ownerId);
+
+        const currentMember = membersRes.data?.data?.items?.find(
+          (member) =>
+            String(member.userId).toLowerCase() ===
+            String(user.id).toLowerCase()
+        );
+
+        setCurrentPermission(
+          currentMember ? mapStringToPermission(currentMember.permission) : null
+        );
+      } catch (error) {
+        console.error('Load material permission error:', error);
+        setCurrentPermission(null);
+      } finally {
+        if (!cancelled) {
+          setPermissionLoading(false);
+        }
+      }
+    };
+
+    loadPermission();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectId, user?.id]);
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+
+    const currentData = editorRef.current.getData();
+    if (currentData === content) return;
+
+    isRemoteUpdatingRef.current = true;
+    editorRef.current.setData(content || '');
+
+    setTimeout(() => {
+      isRemoteUpdatingRef.current = false;
+    }, 0);
+  }, [content]);
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+
+    if (canEditContent) {
+      editorRef.current.disableReadOnlyMode?.('permission-lock');
+      return;
+    }
+
+    editorRef.current.enableReadOnlyMode?.('permission-lock');
+  }, [canEditContent]);
+
+  useEffect(() => {
+    import('@ckeditor/ckeditor5-build-classic').then((mod) => {
+      setClassicEditor(() => mod.default);
+    });
+  }, []);
+
+  const displayActiveUsers = useMemo(() => {
+    const normalizedUsers =
+      activeUsers.length > 0
+        ? activeUsers
+        : user?.id
+          ? [
+              {
+                userId: user.id,
+                connectionId: 'local-user',
+              },
+            ]
+          : [];
+
+    return normalizedUsers.slice(0, 5).map((activeUser) => {
+      const isMe = activeUser.userId === user?.id;
+
+      return {
+        ...activeUser,
+        fallback: isMe
+          ? 'ME'
+          : activeUser.userName?.slice(0, 2)?.toUpperCase() || 'U',
+        displayName: isMe ? 'Bạn' : activeUser.userName,
+      };
+    });
+  }, [activeUsers, user?.id]);
+
+  const activeUserCount = Math.max(activeUsers.length, user?.id ? 1 : 0);
 
   const handleUpdateMaterialInfo = async () => {
     if (!canManageMaterial) {
@@ -159,122 +290,7 @@ export default function MaterialEditorPage() {
     }
   };
 
-  const displayActiveUsers = useMemo(() => {
-    const normalizedUsers = activeUsers.length > 0
-      ? activeUsers
-      : user?.id
-        ? [
-          {
-            userId: user.id,
-            connectionId: 'local-user',
-          },
-        ]
-        : [];
-
-
-    return normalizedUsers.slice(0, 5).map((activeUser) => {
-      const isMe = activeUser.userId === user?.id;
-
-      return {
-        ...activeUser,
-        fallback: isMe
-          ? 'ME'
-          : activeUser.userName?.slice(0, 2)?.toUpperCase() || 'U',
-        displayName: isMe ? 'Bạn' : activeUser.userName,
-      };
-    });
-  }, [activeUsers, user?.id]);
-
-  const activeUserCount = Math.max(activeUsers.length, user?.id ? 1 : 0);
-
-
-  useEffect(() => {
-    if (!material) return;
-
-    setMaterialTitle(material.title || '');
-    setMaterialSummary(material.summary || '');
-  }, [material]);
-
-  useEffect(() => {
-    if (!subjectId || !user?.id) return;
-
-    let cancelled = false;
-
-    const loadPermission = async () => {
-      setPermissionLoading(true);
-
-      try {
-        const [subjectRes, membersRes] = await Promise.all([
-          subjectsApi.getById(subjectId),
-          subjectsApi.getMembers(subjectId, {
-            pageNumber: 1,
-            pageSize: 100,
-          }),
-        ]);
-
-        if (cancelled) return;
-
-        const ownerId = subjectRes.data?.data?.ownerId || null;
-        setSubjectOwnerId(ownerId);
-
-        const currentMember = membersRes.data?.data?.items?.find(
-          (member) =>
-            String(member.userId).toLowerCase() ===
-            String(user.id).toLowerCase()
-        );
-
-        setCurrentPermission(
-          currentMember ? mapStringToPermission(currentMember.permission) : null
-        );
-      } catch (error) {
-        console.error('Load material permission error:', error);
-        setCurrentPermission(null);
-      } finally {
-        if (!cancelled) {
-          setPermissionLoading(false);
-        }
-      }
-    };
-
-    loadPermission();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [subjectId, user?.id]);
-
-  useEffect(() => {
-    import('@ckeditor/ckeditor5-build-classic').then((mod) => {
-      setEditor(() => mod.default);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!editorRef.current) return;
-
-    const currentData = editorRef.current.getData();
-    if (currentData === content) return;
-
-    isRemoteUpdatingRef.current = true;
-    editorRef.current.setData(content);
-
-    setTimeout(() => {
-      isRemoteUpdatingRef.current = false;
-    }, 0);
-  }, [content]);
-
-  useEffect(() => {
-    if (!editorRef.current) return;
-
-    if (canEditContent) {
-      editorRef.current.disableReadOnlyMode?.('permission-lock');
-      return;
-    }
-
-    editorRef.current.enableReadOnlyMode?.('permission-lock');
-  }, [canEditContent, editor]);
-
-  if (!editor) {
+  if (materialLoading && !material) {
     return (
       <div className="flex h-full flex-1 flex-col overflow-hidden bg-muted/40">
         <div className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-6">
@@ -298,6 +314,7 @@ export default function MaterialEditorPage() {
 
   return (
     <TooltipProvider>
+      <style jsx global>{ckEditorTableStyles}</style>
       <div className="flex h-screen flex-1 flex-col overflow-hidden bg-muted/40">
         <header className="z-30 shrink-0 border-b bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex min-h-16 flex-col gap-3 px-4 py-3 sm:px-5 md:flex-row md:items-center md:justify-between md:px-6 md:py-0">
@@ -305,19 +322,10 @@ export default function MaterialEditorPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground md:text-base">
-                    {materialLoading ? 'Đang tải tài liệu...' : material?.title || 'Tài liệu học tập'}
+                    {materialLoading
+                      ? 'Đang tải tài liệu...'
+                      : material?.title || 'Tài liệu học tập'}
                   </h1>
-
-                  {/* <span
-                    className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-                    title={isConnected ? 'Đang online' : 'Mất kết nối'}
-                  >
-                    <span
-                      className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'
-                        }`}
-                    />
-                    {isConnected ? 'Online' : 'Disconnected'}
-                  </span> */}
                 </div>
 
                 <div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
@@ -327,35 +335,34 @@ export default function MaterialEditorPage() {
                       <span className="truncate">Đang kiểm tra quyền truy cập...</span>
                     </>
                   ) : !canEditContent ? (
-                    <span className="truncate">Chế độ chỉ xem · Bạn không thể chỉnh sửa nội dung</span>
+                    <span className="truncate">
+                      Chế độ chỉ xem · Bạn không thể chỉnh sửa nội dung
+                    </span>
                   ) : isEditor && !canManageMaterial ? (
-                    <span className="truncate">Quyền chỉnh sửa · Chỉ được sửa nội dung tài liệu</span>
+                    <span className="truncate">
+                      Quyền chỉnh sửa · Chỉ được sửa nội dung tài liệu
+                    </span>
                   ) : isConnected ? (
-                    <>
-
-                      <span
-                        className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-                        title='Đang online'
-                      >
-                        <span
-                          className={`h-2 w-2 rounded-full  bg-green-500`}
-                        />
-                        Online
-                      </span>
-                    </>
+                    <span
+                      className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
+                      title="Đang online"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-green-500" />
+                      Online
+                    </span>
                   ) : (
                     <>
                       <Loader2 size={13} className="animate-spin" />
                       <span
                         className="hidden items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground sm:inline-flex"
-                        title='Mất kết nối'
+                        title="Mất kết nối"
                       >
-                        <span
-                          className={`h-2 w-2 rounded-full  bg-red-500`}
-                        />
+                        <span className="h-2 w-2 rounded-full bg-red-500" />
                         Disconnected
                       </span>
-                      <span className="truncate">Đang kết nối lại, vẫn có thể tiếp tục soạn thảo</span>
+                      <span className="truncate">
+                        Đang kết nối lại, vẫn có thể tiếp tục soạn thảo
+                      </span>
                     </>
                   )}
                 </div>
@@ -402,6 +409,7 @@ export default function MaterialEditorPage() {
                   <Brain size={15} />
                   <span className="hidden sm:inline">FlashCard</span>
                 </Button>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -413,26 +421,37 @@ export default function MaterialEditorPage() {
                   <History size={15} />
                   <span className="hidden sm:inline">Lịch sử</span>
                 </Button>
+
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowUpdateInfoModal(true)}
-                  disabled={materialActionLoading || materialLoading || !canManageMaterial}
+                  disabled={
+                    materialActionLoading ||
+                    materialLoading ||
+                    !canManageMaterial
+                  }
                   className="shrink-0 gap-2"
                 >
                   <Pencil size={15} />
                   <span className="hidden sm:inline">Đổi tiêu đề</span>
                 </Button>
+
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={handleDeleteMaterial}
-                  disabled={materialActionLoading || materialLoading || !canManageMaterial}
+                  disabled={
+                    materialActionLoading ||
+                    materialLoading ||
+                    !canManageMaterial
+                  }
                   className="shrink-0 gap-2"
                 >
                   <Trash2 size={15} />
                   <span className="hidden sm:inline">Xoá</span>
                 </Button>
+
                 <Button
                   size="sm"
                   onClick={saveSnapshot}
@@ -451,31 +470,81 @@ export default function MaterialEditorPage() {
         <main className="custom-editor-scrollbar min-h-0 flex-1 overflow-y-auto bg-[#f1f3f4] px-4 py-6 md:px-10 md:py-8">
           <div className="mx-auto w-full max-w-[920px]">
             <div className="mb-3 flex items-center justify-between px-1 text-xs text-muted-foreground">
-              <span>Chế độ soạn thảo</span>
-              <span className="md:hidden">
-                {activeUserCount} người đang chỉnh sửa
-              </span>
+              <span>Chế độ soạn thảo CKEditor</span>
+              <span className="md:hidden">{activeUserCount} người đang chỉnh sửa</span>
             </div>
 
-            <div className="docs-page-editor min-h-[1050px] rounded-sm border bg-white shadow-[0_1px_3px_rgba(60,64,67,0.3),0_4px_8px_3px_rgba(60,64,67,0.15)]">
-              <CKEditor
-                editor={editor}
-                data=""
-                onReady={(editorInstance) => {
-                  editorRef.current = editorInstance;
-                  editorInstance.setData(content);
+            <div className="docs-page-editor ck-table-docs min-h-[1050px] rounded-sm border bg-white shadow-[0_1px_3px_rgba(60,64,67,0.3),0_4px_8px_3px_rgba(60,64,67,0.15)]">
+              {!classicEditor ? (
+                <div className="flex h-[760px] items-center justify-center text-muted-foreground">
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Đang tải CKEditor...
+                </div>
+              ) : (
+                <CKEditor
+                  editor={classicEditor}
+                  data=""
+                  config={{
+                    toolbar: {
+                      items: [
+                        'heading',
+                        '|',
+                        'bold',
+                        'italic',
+                        'link',
+                        '|',
+                        'bulletedList',
+                        'numberedList',
+                        'outdent',
+                        'indent',
+                        '|',
+                        'insertTable',
+                        'blockQuote',
+                        'imageUpload',
+                        'mediaEmbed',
+                        '|',
+                        'undo',
+                        'redo',
+                      ],
+                      shouldNotGroupWhenFull: false,
+                    },
+                    table: {
+                      contentToolbar: [
+                        'tableColumn',
+                        'tableRow',
+                        'mergeTableCells',
+                        'tableProperties',
+                        'tableCellProperties',
+                      ],
+                    },
+                    image: {
+                      toolbar: [
+                        'imageTextAlternative',
+                        'toggleImageCaption',
+                        'imageStyle:inline',
+                        'imageStyle:block',
+                        'imageStyle:side',
+                      ],
+                    },
+                  }}
+                  onReady={(editorInstance) => {
+                    editorRef.current = editorInstance;
+                    editorInstance.setData(content || '');
 
-                  if (!canEditContent) {
-                    editorInstance.enableReadOnlyMode?.('permission-lock');
-                  }
-                }}
-                onChange={(_, editorInstance) => {
-                  if (isRemoteUpdatingRef.current || !canEditContent) return;
+                    const editableElement = editorInstance.ui.view.editable.element;
+                    editableElement?.classList.add('ck-custom-resizable-table-editor');
 
-                  const data = editorInstance.getData();
-                  updateContent(data);
-                }}
-              />
+                    if (!canEditContent || permissionLoading) {
+                      editorInstance.enableReadOnlyMode?.('permission-lock');
+                    }
+                  }}
+                  onChange={(_, editorInstance) => {
+                    if (isRemoteUpdatingRef.current || !canEditContentRef.current) return;
+
+                    updateContentRef.current(editorInstance.getData());
+                  }}
+                />
+              )}
             </div>
           </div>
         </main>
@@ -534,6 +603,121 @@ export default function MaterialEditorPage() {
       </div>
     </TooltipProvider>
   );
-
-
 }
+
+const ckEditorTableStyles = `
+  .ck-table-docs .ck-content table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .ck-table-docs .ck-content table td,
+  .ck-table-docs .ck-content table th {
+    min-width: 96px;
+    min-height: 40px;
+    height: 40px;
+    border: 1px solid #cbd5e1;
+    padding: 8px;
+    vertical-align: top;
+    position: relative;
+    overflow: auto;
+    resize: both;
+  }
+
+  .ck-table-docs .ck-content table th {
+    background: #f1f5f9;
+    font-weight: 600;
+  }
+
+  .ck-table-docs .ck-content table td:hover,
+  .ck-table-docs .ck-content table th:hover {
+    outline: 1px dashed #6366f1;
+    outline-offset: -2px;
+  }
+
+  .ck-table-docs .ck-content table td::after,
+  .ck-table-docs .ck-content table th::after {
+    content: '';
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #94a3b8;
+    border-bottom: 2px solid #94a3b8;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .ck-table-docs .ck-content table td:hover::after,
+  .ck-table-docs .ck-content table th:hover::after {
+    opacity: 1;
+  }
+ 
+  .ck-table-docs .ck-content ol,
+  .ck-table-docs .ck-content ul {
+    padding-left: 1.5rem !important;
+    margin-left: 0 !important;
+    list-style-position: outside !important;
+  }
+
+  .ck-table-docs .ck-content li {
+    margin: 0.25rem 0 !important;
+    padding-left: 0.15rem !important;
+  }
+
+  .ck-table-docs .ck-content li > ol,
+  .ck-table-docs .ck-content li > ul {
+    margin-top: 0.35rem !important;
+    margin-bottom: 0.35rem !important;
+  }
+
+  .ck-table-docs .ck-content ol ol,
+  .ck-table-docs .ck-content ul ul,
+  .ck-table-docs .ck-content ol ul,
+  .ck-table-docs .ck-content ul ol {
+    padding-left: 2rem !important;
+    margin-left: 0.5rem !important;
+  }
+
+  .ck-table-docs .ck-content ol ol ol,
+  .ck-table-docs .ck-content ul ul ul,
+  .ck-table-docs .ck-content ol ul ol,
+  .ck-table-docs .ck-content ul ol ul {
+    padding-left: 2.25rem !important;
+    margin-left: 0.75rem !important;
+  }
+
+  .ck-table-docs .ck-content ol {
+    list-style-type: decimal !important;
+  }
+
+  .ck-table-docs .ck-content ol ol {
+    list-style-type: lower-alpha !important;
+  }
+
+  .ck-table-docs .ck-content ol ol ol {
+    list-style-type: lower-roman !important;
+  }
+
+  .ck-table-docs .ck-content ul {
+    list-style-type: disc !important;
+  }
+
+  .ck-table-docs .ck-content ul ul {
+    list-style-type: circle !important;
+  }
+
+  .ck-table-docs .ck-content ul ul ul {
+    list-style-type: square !important;
+  }
+
+  .ck-table-docs .ck-content .ck-list-bogus-paragraph {
+    display: inline !important;
+  }
+
+  .ck-table-docs .ck-content li .ck-list-bogus-paragraph {
+    padding-left: 0.15rem !important;
+  }
+`;

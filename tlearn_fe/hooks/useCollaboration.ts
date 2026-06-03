@@ -7,6 +7,7 @@ type ActiveUser = {
   connectionId: string;
   userName?: string;
   userEmail?: string;
+  userColor?: string;
 };
 
 const normalizeActiveUser = (payload: any): ActiveUser | null => {
@@ -20,6 +21,7 @@ const normalizeActiveUser = (payload: any): ActiveUser | null => {
     connectionId: String(connectionId),
     userName: payload?.userName || payload?.UserName,
     userEmail: payload?.userEmail || payload?.UserEmail,
+    userColor: payload?.userColor || payload?.UserColor,
   };
 };
 
@@ -43,6 +45,24 @@ const upsertActiveUser = (
   }
 
   return [...users, nextUser];
+};
+
+const normalizeOperationPayload = (payload: any) => {
+  if (typeof payload === 'string') {
+    return {
+      operation: payload,
+      userId: undefined,
+      connectionId: undefined,
+      userColor: undefined,
+    };
+  }
+
+  return {
+    operation: payload?.operation || payload?.Operation,
+    userId: payload?.userId || payload?.UserId,
+    connectionId: payload?.connectionId || payload?.ConnectionId,
+    userColor: payload?.userColor || payload?.UserColor,
+  };
 };
 
 export function useCollaboration(materialId: string, userId: string) {
@@ -190,11 +210,15 @@ export function useCollaboration(materialId: string, userId: string) {
       console.log('Material version updated:', payload);
     });
 
-    connection.on('ReceiveOperation', (operation: string) => {
+    connection.on('ReceiveOperation', (payload: unknown) => {
       if (cancelled) return;
 
       try {
-        const parsed = JSON.parse(operation);
+        const normalizedPayload = normalizeOperationPayload(payload);
+
+        if (!normalizedPayload.operation) return;
+
+        const parsed = JSON.parse(String(normalizedPayload.operation));
 
         if (parsed.type !== 'update') return;
         if (parsed.content === undefined) return;

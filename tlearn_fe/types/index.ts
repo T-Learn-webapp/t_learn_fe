@@ -1,11 +1,41 @@
 import { SubjectPermission } from "./Invite";
 
 export interface User {
+
   id: string;
+
   fullName: string;
+
   email: string;
+
   subscriptionType: string;
-  isEmailVerified: boolean;
+
+  emailConfirmed: boolean;
+
+  currentSubscriptionId?: string | null;
+
+  currentPlanType?: string | null;
+
+  currentPlanName?: string | null;
+
+  subscriptionStartDate?: string | null;
+
+  subscriptionEndDate?: string | null;
+
+  hasActiveSubscription: boolean;
+
+  remainingVipDays: number;
+
+  aiUsageLimit: number;
+
+  aiUsedCount: number;
+
+  aiRemainingCount: number;
+
+  aiUsageResetType?: string | null;
+
+  aiUsageResetAt?: string | null;
+
 }
 
 export interface Subject {
