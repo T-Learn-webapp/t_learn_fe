@@ -34,7 +34,7 @@ const emptyFlashcard = (): CreateFlashcardItemRequest => ({
 export default function CreateFlashcardPage() {
     const params = useParams();
     const router = useRouter();
-    const { user } = useAuthContext();
+    const { user, refetchAuth } = useAuthContext();
     const subjectId = params.id as string;
     const materialId = params.materialId as string;
 
@@ -103,6 +103,8 @@ export default function CreateFlashcardPage() {
         const result = await generateAIFlashcards(safeCount);
 
         if (result.success && result.data) {
+            await refetchAuth();
+
             setMode('manual');
 
             setItems(

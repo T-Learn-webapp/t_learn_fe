@@ -1,11 +1,19 @@
 'use client';
 
-import { CheckCircle2, Crown } from 'lucide-react';
+import { useEffect } from 'react';
+import { CheckCircle2, Crown, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { useAuthContext } from '@/components/providers/AuthProvider';
 
 export default function PaymentSuccessPage() {
+  const { refetchAuth } = useAuthContext();
+
+  useEffect(() => {
+    refetchAuth();
+  }, [refetchAuth]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f6f7fb] px-4">
       <div className="w-full max-w-lg rounded-3xl border bg-white p-8 text-center shadow-sm">
@@ -28,16 +36,23 @@ export default function PaymentSuccessPage() {
           </p>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button asChild className="flex-1">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          <Button asChild>
             <Link href="/subjects">
               Về trang chủ đề
             </Link>
           </Button>
 
-          <Button asChild variant="outline" className="flex-1">
+          <Button asChild variant="outline">
             <Link href="/upgrade">
               Xem gói nâng cấp
+            </Link>
+          </Button>
+
+          <Button asChild variant="outline" className="gap-2 sm:col-span-2">
+            <Link href="/payments/history">
+              <CreditCard size={16} />
+              Lịch sử thanh toán
             </Link>
           </Button>
         </div>

@@ -7,6 +7,7 @@ import {
   LogOut,
   Sparkles,
   UserRound,
+  CreditCard
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -87,6 +88,7 @@ export function AppHeader() {
             <Crown size={15} />
             {isVip ? 'Gói của tôi' : 'Nâng cấp'}
           </Link>
+
         </nav>
 
         <div className="flex items-center gap-2">
@@ -211,7 +213,12 @@ export function AppHeader() {
                     Hồ sơ
                   </Link>
                 </DropdownMenuItem>
-
+                <DropdownMenuItem asChild>
+                  <Link href="/payment/history" className="cursor-pointer">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Lịch sử thanh toán
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/upgrade" className="cursor-pointer">
                     <Crown className="mr-2 h-4 w-4" />
